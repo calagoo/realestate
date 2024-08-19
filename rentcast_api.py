@@ -49,7 +49,7 @@ def folium_map(df):
     """ Create a folium map """
     # Create a base map
     m = folium.Map(location=[37.7749, -122.4194], zoom_start=13)
-    # folium.GeoJson("sf_neighborhoods.geojson").add_to(m)
+    # folium.GeoJson("sf_neighborhoods.geojson").add_to(m) # Adds the neighborhood boundaries to the map
 
     neighborhoods = gpd.read_file("sf_neighborhoods.geojson")
     merged = neighborhoods.merge(df, left_on='neighborhood', right_on='neighborhood')
@@ -95,7 +95,7 @@ def get_heat_data(df):
     n_df["total_price"] = float(0)
     n_df["average_price"] = float(0)
     n_df["ratio_price"] = float(0)
-    
+
     n_df["total_sqft"] = float(0)
     n_df["average_sqft"] = float(0)
     n_df["price_per_sqft"] = float(0)
@@ -135,4 +135,7 @@ def main():
 
     neighborhood_prices_df = get_heat_data(df)
     folium_map(neighborhood_prices_df)
-    
+    # print(rent_json)
+
+if __name__ == '__main__':
+    main()
