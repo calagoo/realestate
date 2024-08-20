@@ -11,6 +11,7 @@ from IPython.display import display
 
 API_KEY = os.getenv('RENTCAST_APIKEY')
 
+
 def rentcast_api():
     """ Call Rentcast API to get rental data """
 
@@ -27,10 +28,10 @@ def rentcast_api():
         if response.status_code != 200:
             print(f"Error: {response.json()}")
         return response.json()
-    
-    data_json_1 = paginate_request(0) # 0-500
-    data_json_2 = paginate_request(500) # 501-1001
-    data_json_3 = paginate_request(1000) # 1002-1502
+
+    data_json_1 = paginate_request(0)  # 0-500
+    data_json_2 = paginate_request(500)  # 501-1001
+    data_json_3 = paginate_request(1000)  # 1002-1502
 
     data = []
     data.extend(data_json_1)
@@ -41,25 +42,30 @@ def rentcast_api():
         json.dump(data, f, indent=4)
     return data, today
 
+
 def rentcast_fake_api():
     """ Fake API response """
     with open('response.json', 'r', encoding="UTF-8") as f:
         return json.load(f)
+
 
 def json_to_data(rent_json):
     """ convert json to DataFrame """
     df = pd.DataFrame(rent_json)
     return df
 
+
 def folium_map(proc_df, full_df):
     """ Create a folium map """
 
     # Create a base map
-    m = folium.Map(location=[37.7749, -122.4194], zoom_start=13) # San Francisco coordinates
+    # San Francisco coordinates
+    m = folium.Map(location=[37.7749, -122.4194], zoom_start=13)
     # folium.GeoJson("sf_neighborhoods.geojson").add_to(m) # Adds the neighborhood boundaries to the map
 
     neighborhoods = gpd.read_file("sf_neighborhoods.geojson")
-    merged = neighborhoods.merge(proc_df, left_on='neighborhood', right_on='neighborhood')
+    merged = neighborhoods.merge(
+        proc_df, left_on='neighborhood', right_on='neighborhood')
 
     # Add the choropleth layer
     folium.Choropleth(
@@ -77,14 +83,16 @@ def folium_map(proc_df, full_df):
     # Create a FeatureGroup for the rentals
     rental_group = folium.FeatureGroup(name="Rentals").add_to(m)
 
-    # Add a point for each lat/long in the dataset, color-coded by price
+    # Add a point for each lat/long in the dataset, color coded by price
     for _, row in full_df.iterrows():
 
-        n_avg = proc_df[proc_df["neighborhood"] == row["neighborhood"]]["price_per_sqft"].values[0] # neighborhood price/sqft
-        a_ = row["price_per_sqft"] # apartment price/sqft
+        n_avg = proc_df[proc_df["neighborhood"] == row["neighborhood"]
+                        ]["price_per_sqft"].values[0]  # neighborhood price/sqft
+        a_ = row["price_per_sqft"]  # apartment price/sqft
         if a_ == 0:
             a_ = n_avg
-        spectral_cm = cm.LinearColormap(['green', 'yellow', 'red'], vmin=n_avg-1, vmax=n_avg+1)
+        spectral_cm = cm.LinearColormap(
+            ['green', 'yellow', 'red'], vmin=n_avg-1, vmax=n_avg+1)
 
         simple_cm = "black"
         if a_ < n_avg-0.25:
@@ -95,7 +103,8 @@ def folium_map(proc_df, full_df):
             simple_cm = "orange"
 
         price = int(row["price"])
-        sqFT = int(row["squareFootage"]) if not pd.isna(row["squareFootage"]) else "-"
+        sqFT = int(row["squareFootage"]) if not pd.isna(
+            row["squareFootage"]) else "-"
         beds = int(row["bedrooms"]) if not pd.isna(row["bedrooms"]) else "-"
         baths = int(row["bathrooms"]) if not pd.isna(row["bathrooms"]) else "-"
 
@@ -111,7 +120,8 @@ def folium_map(proc_df, full_df):
             <a href="{address_search}" target="_blank">{row["formattedAddress"]}</a>
         </div>
         '''
-        icon = folium.Icon(color=simple_cm, icon='glyphicon glyphicon-map-marker')
+        icon = folium.Icon(
+            color=simple_cm, icon='glyphicon glyphicon-map-marker')
         folium.Marker(
             location=[row['latitude'], row['longitude']],
             radius=10,
@@ -120,7 +130,7 @@ def folium_map(proc_df, full_df):
             # fill=True,
             # fill_color=spectral_cm(a_),
             # fill_opacity=1,
-            popup=folium.Popup(popup_html,max_width=500),
+            popup=folium.Popup(popup_html, max_width=500)
         ).add_to(rental_group)
 
     # Create a FeatureGroup for the text
@@ -137,43 +147,34 @@ def folium_map(proc_df, full_df):
             )
         ).add_to(text_group)
 
-
-    # Optional: Add a layer control panel
+    # Add a layer control panel
     folium.LayerControl().add_to(m)
 
     m.keep_in_front(rental_group)
 
+    # Text with the current date
+    last_updated_text = f"Last Updated {dt.datetime.now().strftime('%Y-%m-%d')}"
 
-    # Add a JavaScript slider for filtering
-    slider_html = '''
-        <div id="slider-container" style="position: fixed; bottom: 50px; left: 50px; z-index:9999;">
-            <input id="price-slider" type="range" min="1000" max="2000" step="100" value="2000"
-                oninput="updateMap(this.value)">
-            <label for="price-slider">Max Price: <span id="slider-value">2000</span></label>
+    # HTML for the static text in the upper right corner
+    static_text_html = f'''
+        <div style="
+            position: fixed; 
+            bottom: 20px; 
+            right: 10px; 
+            background-color: white; 
+            padding: 10px; 
+            border-radius: 5px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            font-size: 14pt;
+            z-index: 9999;">
+            {last_updated_text}
         </div>
-        <script>
-            function updateMap(value) {
-                document.getElementById("slider-value").textContent = value;
-                var markers = document.getElementsByClassName("leaflet-interactive");
-                var popups = document.getElementsByClassName("leaflet-popup-content-wrapper");
-                for (var i = 0; i < markers.length; i++) {
-                    var marker = markers[i];
-                    var price = parseInt(popups[i].innerText.split("$")[1].split("\\n")[0]);
-                    if (price > value) {
-                        marker.style.display = "none";
-                    } else {
-                        marker.style.display = "block";
-                    }
-                }
-            }
-        </script>
     '''
 
-    # Add the slider HTML to the map
-    # m.get_root().html.add_child(folium.Element(slider_html))
-
+    # Add the static text to the map
+    m.get_root().html.add_child(folium.Element(static_text_html))
     # Save the map to an HTML file
-    m.save('neighborhood_choropleth.html')
+    m.save('sf_rent_heatmap.html')
 
 
 def get_heat_data(df):
@@ -191,7 +192,8 @@ def get_heat_data(df):
 
     n_df["samples"] = float(0)
 
-    points_gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.longitude, df.latitude,crs='EPSG:4326')) # WGS 84
+    points_gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(
+        df.longitude, df.latitude, crs='EPSG:4326'))  # WGS 84
 
     # neighborhoods = neighborhoods.to_crs(epsg=4326) # WGS 84
     # points_gdf = points_gdf.to_crs(epsg=4326) # WGS 84
@@ -200,7 +202,8 @@ def get_heat_data(df):
 
     # Cast price and sqft to float
     points_within["price"] = points_within["price"].astype(float)
-    points_within["squareFootage"] = points_within["squareFootage"].astype(float)
+    points_within["squareFootage"] = points_within["squareFootage"].astype(
+        float)
 
     points_within["price_per_sqft"] = float(0)
 
@@ -209,21 +212,27 @@ def get_heat_data(df):
 
         # Check if the square footage is not null
         if not pd.isna(row["squareFootage"]) and row["squareFootage"] > 0:
-            points_within.loc[points_within["id_left"]==row["id_left"],"price_per_sqft"] = row["price"] / row["squareFootage"]
+            points_within.loc[points_within["id_left"] == row["id_left"],
+                              "price_per_sqft"] = row["price"] / row["squareFootage"]
         else:
-            points_within.loc[points_within["id_left"]==row["id_left"],"price_per_sqft"] = 0
+            points_within.loc[points_within["id_left"]
+                              == row["id_left"], "price_per_sqft"] = 0
 
         # Samples
         n_df.loc[n_df["neighborhood"] == row["neighborhood"], "samples"] += 1
 
         # Price
-        n_df.loc[n_df["neighborhood"] == row["neighborhood"], "total_price"] += row["price"]
-        n_df.loc[n_df["neighborhood"] == row["neighborhood"], "average_price"] = n_df.loc[n_df["neighborhood"] == row["neighborhood"], "total_price"] / len(points_within[points_within["neighborhood"] == row["neighborhood"]])
+        n_df.loc[n_df["neighborhood"] == row["neighborhood"],
+                 "total_price"] += row["price"]
+        n_df.loc[n_df["neighborhood"] == row["neighborhood"], "average_price"] = n_df.loc[n_df["neighborhood"] ==
+                                                                                          row["neighborhood"], "total_price"] / len(points_within[points_within["neighborhood"] == row["neighborhood"]])
 
         # Sqft
         if row["squareFootage"] and row["squareFootage"] > 0:
-            n_df.loc[n_df["neighborhood"] == row["neighborhood"], "total_sqft"] += row["squareFootage"]
-            n_df.loc[n_df["neighborhood"] == row["neighborhood"], "average_sqft"] = n_df.loc[n_df["neighborhood"] == row["neighborhood"], "total_sqft"] / len(points_within[points_within["neighborhood"] == row["neighborhood"]])
+            n_df.loc[n_df["neighborhood"] == row["neighborhood"],
+                     "total_sqft"] += row["squareFootage"]
+            n_df.loc[n_df["neighborhood"] == row["neighborhood"], "average_sqft"] = n_df.loc[n_df["neighborhood"] ==
+                                                                                             row["neighborhood"], "total_sqft"] / len(points_within[points_within["neighborhood"] == row["neighborhood"]])
 
     n_df["ratio_price"] = n_df["average_price"] / n_df["average_price"].max()
     n_df["price_per_sqft"] = n_df["average_price"] / n_df["average_sqft"]
@@ -231,6 +240,7 @@ def get_heat_data(df):
     f_df = points_within
 
     return n_df, f_df
+
 
 def main():
     """ Main """
@@ -243,6 +253,7 @@ def main():
     neighborhood_prices_df, full_df = get_heat_data(df)
     folium_map(neighborhood_prices_df, full_df)
     # print(rent_json)
+
 
 if __name__ == '__main__':
     main()
